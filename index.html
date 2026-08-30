@@ -384,12 +384,146 @@
                             </div>
                         </div>
 
-                        <button onclick="processCheckout()" id="btn-process-pay" disabled class="w-full bg-primary hover:bg-primary-dark disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-extrabold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2 shadow-sm">
-                            <i data-lucide="check-circle" class="w-5 h-5"></i> Selesaikan Transaksi
-                        </button>
-                    </div>
-                </div>
-            </section>
+                        <!-- 1. FORM SETTING MERCHANT  -->
+<div class="merchant-qris-setting card p-3 mb-4">
+    <h5>Pengaturan QRIS Merchant</h5>
+    <div class="form-group mb-3">
+        <label for="merchantQrisLink" class="form-label">Link Google Drive QRIS Merchant:</label>
+        <input type="url" id="merchantQrisLink" class="form-control" placeholder="Contoh: https://drive.google.com/file/d/1ABC.../view?usp=sharing">
+        <small class="text-muted d-block mt-1">
+            *Pastikan akses link di Google Drive diatur ke <strong>"Siapa saja yang memiliki link" (Public)</strong>.
+        </small>
+    </div>
+    <button type="button" onclick="saveMerchantQris()" class="btn btn-primary">Simpan QRIS Merchant</button>
+</div>
+
+<hr my-4>
+
+<!-- 2. HALAMAN CHECKOUT / PEMBAYARAN PEMBELI -->
+<div class="checkout-payment-section card p-3">
+    <h5>Metode Pembayaran</h5>
+    <button type="button" onclick="showQrisPaymentSection()" class="btn btn-outline-success mb-3">
+        Bayar via QRIS
+    </button>
+
+    <!-- Container Pembayaran QRIS (Default Hidden) -->
+    <div id="qrisPaymentSection" class="text-center p-3 border rounded bg-light" style="display: none;">
+        <h6 class="fw-bold">Scan QRIS Merchant</h6>
+        <p class="small text-muted mb-2">Silakan scan QRIS di bawah menggunakan GoPay, OVO, DANA, ShopeePay, atau Mobile Banking.</p>
+        
+        <!-- Gambar QRIS Asli Merchant -->
+        <div class="qris-image-wrapper my-3">
+            <img id="qrisImageDisplay" src="" alt="QRIS Merchant" style="max-width: 280px; width: 100%; border: 2px solid #ddd; border-radius: 8px; padding: 5px; background: #fff;">
+        </div>
+
+        <!-- Form Upload Bukti Transfer -->
+        <div class="form-group my-3 text-start style-container" style="max-width: 320px; margin: 0 auto;">
+            <label for="paymentProof" class="form-label small fw-bold">Upload Bukti Transfer / Pembayaran:</label>
+            <input type="file" id="paymentProof" class="form-control form-control-sm" accept="image/*">
+        </div>
+
+        <!-- Tombol Konfirmasi -->
+        <button type="button" id="btnSubmitPayment" onclick="processManualQrisPayment()" class="btn btn-success w-100 mt-2" style="max-width: 320px;">
+            Konfirmasi Pembayaran
+        </button>
+    </div>
+</div>
+
+<!-- 3. LOGIKA JAVASCRIPT (INTEGRASI & PROSES PEMBAYARAN) -->
+<script>
+/**
+ * Mengubah URL Shareable Google Drive menjadi Direct Link Image URL
+ */
+function getDirectGDriveImageUrl(gdriveUrl) {
+    if (!gdriveUrl) return '';
+    
+    // Ekstrak File ID dari format link Google Drive
+    const match = gdriveUrl.match(/\\/d\\/([a-zA-Z0-9_-]+)/) || gdriveUrl.match(/id=([a-zA-Z0-9_-]+)/);
+    if (match && match[1]) {
+        const fileId = match[1];
+        // Direct View Endpoint Google Drive
+        return `https://lh3.googleusercontent.com/d/${fileId}`;
+    }
+    
+    // Mengembalikan URL asli jika sudah merupakan direct URL gambar
+    return gdriveUrl;
+}
+
+/**
+ * Menyimpan QRIS Merchant ke storage/database
+ */
+function saveMerchantQris() {
+    const rawUrl = document.getElementById('merchantQrisLink').value.trim();
+    if (!rawUrl) {
+        alert('Harap masukkan URL Google Drive QRIS Anda.');
+        return;
+    }
+
+    const directUrl = getDirectGDriveImageUrl(rawUrl);
+    if (directUrl) {
+        // Simpan ke localStorage (bisa diganti dengan API hit ke database Backend Anda)
+        localStorage.setItem('pasar_merchant_qris', directUrl);
+        alert('QRIS Merchant berhasil disimpan!');
+    } else {
+        alert('URL Google Drive tidak valid. Pastikan format link benar.');
+    }
+}
+
+/**
+ * Menampilkan section QRIS saat pembeli memilih pembayaran QRIS
+ */
+function showQrisPaymentSection() {
+    // Ambil link QRIS yang sudah disetting merchant
+    const savedQris = localStorage.getItem('pasar_merchant_qris');
+    const displayImg = document.getElementById('qrisImageDisplay');
+    const qrisSection = document.getElementById('qrisPaymentSection');
+
+    if (!savedQris) {
+        alert('Merchant belum mengatur QRIS Pembayaran.');
+        displayImg.src = 'https://via.placeholder.com/300x300?text=QRIS+Belum+Tersedia';
+    } else {
+        displayImg.src = savedQris;
+    }
+
+    qrisSection.style.display = 'block';
+}
+
+/**
+ * Memproses pembayaran secara manual (Status: Menunggu Verifikasi)
+ */
+function processManualQrisPayment() {
+    const proofInput = document.getElementById('paymentProof');
+    
+    if (!proofInput.files || proofInput.files.length === 0) {
+        alert('Harap unggah/upload foto bukti pembayaran terlebih dahulu!');
+        return;
+    }
+
+    // Mengubah status pembayaran menjadi PENDING (Tidak Otomatis Berhasil)
+    const transaction = {
+        orderId: 'TRX-PASAR-' + Date.now(),
+        status: 'PENDING_VERIFICATION', // Status menunggu verifikasi manual oleh merchant
+        proofFileName: proofInput.files[0].name,
+        createdAt: new Date().toLocaleString('id-ID')
+    };
+
+    console.log('Transaksi berhasil dibuat (Status Pending):', transaction);
+
+    alert('Pembayaran berhasil dikirim! Status pesanan Anda saat ini "Menunggu Verifikasi Penjual".');
+    
+    // Contoh tindakan setelah konfirmasi: Reset form atau redirect halaman
+    document.getElementById('qrisPaymentSection').style.display = 'none';
+    proofInput.value = '';
+}
+</script>
+"""
+
+# Write to txt file
+file_name = "integrasi_qris_manual_pasar.txt"
+with open(file_name, "w", encoding="utf-8") as f:
+    f.write(code_content)
+
+print(f"File created successfully: {file_name}")
 
             <!-- 4️⃣ SMARTBOOK (KEUANGAN) SECTION -->
             <section id="view-smartbook" class="view-section hidden space-y-6">
